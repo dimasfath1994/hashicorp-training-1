@@ -1,22 +1,17 @@
-
 # HashiCorp Vault Local Development Setup
 
 A simple, automated Docker Compose setup for running HashiCorp Vault locally with auto-initialization and auto-unseal features using Shamir's secret sharing. Perfect for learning and testing.
 
----
-
 ## Prerequisites
 
-* Docker
-* Docker Compose
-
----
+- Docker
+- Docker Compose
 
 ## Getting Started
 
 ### 1. Run the Container
-Clone or place your `docker-compose.yml` file in your project directory, then start the service in detached mode:
 
+Clone or place your docker-compose.yml file in your project directory, then start the service in detached mode:
 ```bash
 docker compose up -d
 
@@ -25,13 +20,13 @@ docker compose up -d
 The container will automatically:
 
 * Generate self-signed SSL certificates.
-* Create the configuration file (`vault.hcl`).
+* Create the configuration file (vault.hcl).
 * Initialize Vault (if not already initialized) and save the keys to `./data/vault-init.json`.
 * Automatically unseal the Vault server.
 
 ### 2. Check Logs
 
-To monitor the startup logs and verify the Vault status (`Sealed: false`), run:
+To monitor the startup logs and verify the Vault status (Sealed: false), run:
 
 ```bash
 docker compose logs -f vault
@@ -77,17 +72,21 @@ Login using your Root Token (you can find your root token inside `./data/vault-i
 vault login <your-root-token>
 
 ```
-enable
+
+Enable KV secrets engine:
+
 ```bash
 vault secrets enable -path=secret kv-v2
+
 ```
+
 ---
 
-### CRUD Operations (KV Secrets Engine)
+## CRUD Operations (KV Secrets Engine)
 
 By default, Vault has a KV secrets engine enabled at `secret/`.
 
-#### 1. Create / Write a Secret
+### 1. Create / Write a Secret
 
 Create a new secret named `secret/my-app` with key-value pairs:
 
@@ -96,7 +95,7 @@ vault kv put secret/my-app username="admin" password="mysecurepassword"
 
 ```
 
-#### 2. Get / Read a Secret
+### 2. Get / Read a Secret
 
 Retrieve the secret data:
 
@@ -107,7 +106,7 @@ vault kv get secret/my-app
 
 *(To output in JSON format: `vault kv get -format=json secret/my-app`)*
 
-#### 3. Update a Secret
+### 3. Update a Secret
 
 Updating is done by writing to the same path (this creates a new version in KV v2):
 
@@ -116,7 +115,7 @@ vault kv put secret/my-app username="admin" password="newpassword123"
 
 ```
 
-#### 4. Delete a Secret
+### 4. Delete a Secret
 
 To delete the latest version of the secret:
 
@@ -124,6 +123,50 @@ To delete the latest version of the secret:
 vault kv delete secret/my-app
 
 ```
+
+---
+
+## Advanced: Temporary / Short-lived Secrets (Cubbyhole)
+
+If you want to create a secret that expires automatically (for example, valid for only 1 minute), you can use Vault's **Cubbyhole** secrets engine combined with a short-lived token (`-ttl`).
+
+### 1. Create a short-lived Token (TTL: 1 minute)
+
+Generate a temporary token that expires in 60 seconds:
+
+```bash
+vault token create -ttl=1m -policy=default
+
+```
+
+*(Copy the generated token, e.g., `hvs.xxxxxx`)*
+
+### 2. Login using the Temporary Token
+
+```bash
+vault login <temporary-token>
+
+```
+
+### 3. Write a Secret to Cubbyhole
+
+Save a secret tied to this temporary token session:
+
+```bash
+vault write cubbyhole/temp-secret message="This data expires in 1 minute!"
+
+```
+
+### 4. Read the Secret
+
+Retrieve the secret before time runs out:
+
+```bash
+vault read cubbyhole/temp-secret
+
+```
+
+*(Once the 1-minute TTL is reached, the token and its associated cubbyhole data will automatically expire and become inaccessible).*
 
 ```
 
