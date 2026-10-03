@@ -1,0 +1,10 @@
+# 1. Tarik data dari Vault menggunakan curl.exe bawaan Windows
+$responseJson = (curl.exe -k -s -H "X-Vault-Token: {{YOUR_HASHICORP_TOKEN}}" "https://127.0.0.1:8200/v1/secret/data/my-app") | ConvertFrom-Json
+
+# 2. Ekstrak password dari struktur JSON KV v2
+$myPass = $responseJson.data.data.password
+
+# 3. Simpan ke Environment Variable Windows (User level)
+[System.Environment]::SetEnvironmentVariable('DB_PASSWORD', $myPass, 'User')
+
+Write-Output "Berhasil! Password ($myPass) telah masuk ke Environment Variable Windows."
