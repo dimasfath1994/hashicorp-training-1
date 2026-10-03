@@ -77,7 +77,10 @@ Login using your Root Token (you can find your root token inside `./data/vault-i
 vault login <your-root-token>
 
 ```
-
+enable
+```bash
+vault secrets enable -path=secret kv-v2
+```
 ---
 
 ### CRUD Operations (KV Secrets Engine)
