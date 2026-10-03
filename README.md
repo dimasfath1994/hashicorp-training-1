@@ -168,6 +168,3 @@ vault read cubbyhole/temp-secret
 
 *(Once the 1-minute TTL is reached, the token and its associated cubbyhole data will automatically expire and become inaccessible).*
 
-```
-
-```
