@@ -1,0 +1,66 @@
+services:
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault-server
+    restart: unless-stopped
+    user: root
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "https://127.0.0.1:8200"
+      VAULT_SKIP_VERIFY: "true"
+    volumes:
+      - ./config:/vault/config
+      - ./certs:/vault/certs
+      - ./data:/vault/data
+    entrypoint:
+      - sh
+      - -c
+      - |
+        export VAULT_ADDR="https://127.0.0.1:8200"
+        export VAULT_SKIP_VERIFY="true"
+
+        echo "[1/4] Menyiapkan direktori & konfigurasi..."
+        mkdir -p /vault/config /vault/certs /vault/data
+        chmod -R 777 /vault/config /vault/certs /vault/data
+
+        [ -f /vault/config/vault.hcl ] || echo 'storage "file" { path = "/vault/data" } listener "tcp" { address = "0.0.0.0:8200" tls_cert_file = "/vault/certs/vault.crt" tls_key_file = "/vault/certs/vault.key" } disable_mlock = true ui = true' > /vault/config/vault.hcl
+        [ -f /vault/certs/vault.crt ] || { openssl req -x509 -newkey rsa:4096 -keyout /vault/certs/vault.key -out /vault/certs/vault.crt -days 365 -nodes -subj "/CN=localhost" && chmod 644 /vault/certs/*; }
+
+        echo "[2/4] Menjalankan Vault server..."
+        vault server -config=/vault/config/vault.hcl &
+        SERVER_PID=$$!
+
+        echo "[3/4] Menunggu Vault aktif..."
+        until vault status >/dev/null 2>&1 || [ $$? -eq 2 ]; do
+          sleep 1
+        done
+
+        # Cek status inisialisasi langsung dari API Vault
+        INIT_STATUS=$$(vault status -format=json 2>/dev/null | grep -o '"initialized":[^,]*' | cut -d':' -f2)
+
+        if [ "$$INIT_STATUS" != "true" ]; then
+          echo "==> Vault belum terinisialisasi. Membuat inisialisasi baru..."
+          vault operator init -format=json > /vault/data/vault-init.json
+          chmod 644 /vault/data/vault-init.json
+          echo "==> Inisialisasi selesai!"
+        else
+          echo "==> Vault sudah terinisialisasi."
+        fi
+
+        echo "[4/4] Melakukan unseal otomatis..."
+        if [ -f /vault/data/vault-init.json ]; then
+          K1=$$(awk -F'"' '/"unseal_keys_b64"/ {flag=1; next} flag && /]/ {flag=0} flag {print $$2}' /vault/data/vault-init.json | sed -n '1p')
+          K2=$$(awk -F'"' '/"unseal_keys_b64"/ {flag=1; next} flag && /]/ {flag=0} flag {print $$2}' /vault/data/vault-init.json | sed -n '2p')
+          K3=$$(awk -F'"' '/"unseal_keys_b64"/ {flag=1; next} flag && /]/ {flag=0} flag {print $$2}' /vault/data/vault-init.json | sed -n '3p')
+
+          [ -n "$$K1" ] && vault operator unseal "$$K1" >/dev/null 2>&1
+          [ -n "$$K2" ] && vault operator unseal "$$K2" >/dev/null 2>&1
+          [ -n "$$K3" ] && vault operator unseal "$$K3" >/dev/null 2>&1
+        fi
+
+        echo "======================================================"
+        vault status
+        echo "======================================================"
+
+        wait $$SERVER_PID
